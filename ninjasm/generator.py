@@ -20,6 +20,10 @@ class Generator:
             print(f"COLS {cols}")
             # if we are following a python block that increase indent level
             if self.ls_code[idx - 1].content[-1] == ':':
+                # no previous correctly indented level
+                if cols == -1:
+                    # force it to 4 space
+                    cols = 4
                 print(f"INDENT LEVEL {self.ls_code[idx - 1].indent} / {cols}")
                 code.indent = self.ls_code[idx - 1].indent + cols
         return cols
@@ -27,18 +31,23 @@ class Generator:
     def handle_function(self, cols):
         from ninjasm.parser import PythonBeginFunction, PythonEndFunction
         res = []
-        last_func = -1
+        last_func = []
         for idx, code in enumerate(self.ls_code):
             # check function begins
             if type(code) is PythonBeginFunction:
                 # remember the last index (FIXME: no inline function)
-                last_func = idx
+                last_func.append(idx)
                 # store the indent level
                 code.cols = cols
             # check indent of function
-            elif last_func != -1 and hasattr(code, 'space') and code.space == self.ls_code[last_func].space:
-                res.append(PythonEndFunction(self.ls_code[last_func + 1].indent))
-                last_func = -1
+            elif len(last_func) and hasattr(code, 'space') and code.space == self.ls_code[last_func[-1]].space:
+                last_indent = self.ls_code[last_func[-1] + 1].indent
+                without_return = False
+                # FIXME: how to handle no returning functions? must use annotation!?
+                if self.ls_code[last_func[-1]].fname == '__init__':
+                    without_return = True
+                res.append(PythonEndFunction(last_indent, without_return))
+                last_func.pop()
             res.append(code)
         self.ls_code = res
 

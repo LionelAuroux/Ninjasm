@@ -10,6 +10,7 @@ import re
 
 class PythonCode:
     def __init__(self, content):
+        print(f"Construct {type(content)}")
         self.content = content
         self.indent = -1
         self.space = -1
@@ -31,8 +32,9 @@ class PythonCode:
         return self.content + '\n'
 
 class PythonBeginFunction(PythonCode):
-    def __init__(self, content):
+    def __init__(self, content, fname):
         PythonCode.__init__(self, content)
+        self.fname = fname
         self.cols = -1
 
     def __repr__(self):
@@ -44,14 +46,17 @@ class PythonBeginFunction(PythonCode):
             )
 
 class PythonEndFunction(PythonCode):
-    def __init__(self, indent):
+    def __init__(self, indent, without_return=False):
         self.indent = indent
         self.space = -1
+        self.without_return = without_return
 
     def __repr__(self):
         return f"[pythonendcode]\n"
 
     def add_content(self):
+        if self.without_return:
+            return '\n'
         return (self.indent * ' ') + 'return __out__\n'
 
 def escape(txt):
@@ -83,7 +88,7 @@ class Builder:
         if groupdict['python_code'] is not None:
             return PythonCode(groupdict['code'])
         if groupdict['python_funcode'] is not None:
-            return PythonBeginFunction(groupdict['fcode'])
+            return PythonBeginFunction(groupdict['fcode'], groupdict['fname'])
         elif groupdict['asm_insn'] is not None:
             return AsmCode(groupdict['asm_insn'])
         elif groupdict['comment'] is not None:
@@ -102,7 +107,7 @@ class Parser:
          #  comment <- ';' .* EOS
          #  asm_insn <- [^;]* comment? EOS
         )
-        (?P<python_funcode>;>>\s(?P<fcode>def\s+[^\n]*)\n)
+        (?P<python_funcode>;>>\s(?P<fcode>\s*def\s+(?P<fname>\w+)[^\n]*)\n)
         | (?P<python_code>;>>\s(?P<code>[^\n]*)\n)
         | (?P<comment>;(?!>>)[^\n]*\n)
         | (?P<asm_insn>[^;\n]*(?P<comment_asm_insn>;[^\n]*)?\n)
