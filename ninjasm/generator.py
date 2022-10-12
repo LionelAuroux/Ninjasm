@@ -29,7 +29,7 @@ class Generator:
         return cols
 
     def handle_function(self, cols):
-        from ninjasm.parser import PythonBeginFunction, PythonEndFunction
+        from ninjasm.parser import PythonBeginFunction, PythonEndFunction, AsmCode
         res = []
         last_func = []
         for idx, code in enumerate(self.ls_code):
@@ -42,10 +42,16 @@ class Generator:
             # check indent of function
             elif len(last_func) and hasattr(code, 'space') and code.space == self.ls_code[last_func[-1]].space:
                 last_indent = self.ls_code[last_func[-1] + 1].indent
-                without_return = False
-                # FIXME: how to handle no returning functions? must use annotation!?
-                if self.ls_code[last_func[-1]].fname == '__init__':
-                    without_return = True
+                without_return = True
+                # FIXME: how to handle inline function
+                # check that no asmcode belongs to between here and beginning of function
+                for subidx in range(idx, last_func[-1] + 1, -1):
+                    print(f"CHECK subidx {subidx}")
+                    if type(self.ls_code[subidx]) is AsmCode:
+                        print(f"Found asmcode")
+                        without_return = False
+                        break
+                print(f"APPEND END")
                 res.append(PythonEndFunction(last_indent, without_return))
                 last_func.pop()
             res.append(code)
@@ -55,6 +61,7 @@ class Generator:
         here = pl.Path('.').resolve()
         cols = self.handle_indent()
         self.handle_function(cols)
+        print(f"LS CODE {self.ls_code}")
         with open(here / stage1, 'w') as f:
             txt = "__out__ = ''\n"
             for idx, code in enumerate(self.ls_code):

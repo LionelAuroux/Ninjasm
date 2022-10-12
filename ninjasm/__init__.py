@@ -16,7 +16,6 @@ def main():
         content = open(f).read()
         p = Parser()
         stmts = p.parse(content)
-        print(f"RESULT {stmts}")
         g = Generator(stmts)
         s1 = f.with_suffix('.py')
         s2 = f.with_suffix('.nja')
