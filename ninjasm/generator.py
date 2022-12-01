@@ -28,6 +28,40 @@ class Generator:
                 code.indent = self.ls_code[idx - 1].indent + cols
         return cols
 
+    def handle_heredoc(self):
+        from ninjasm.parser import PythonBeginStr, PythonEndStr, AsmCode, PythonCode
+        res = []
+        szcode = len(self.ls_code)
+        idx = 0
+        while True:
+            if idx >= szcode:
+                break
+            code = self.ls_code[idx]
+            if type(code) is PythonBeginStr:
+                print(f"FOUND HEREDOC BEGIN STR")
+                # handle heredoc
+                heredoc = code.content + "\n"
+                next_idx = idx
+                while True:
+                    if next_idx == szcode:
+                        idx = next_idx
+                        break
+                    ncode = self.ls_code[next_idx]
+                    print(f"TYPE {type(ncode)}")
+                    if type(ncode) is PythonEndStr:
+                        print(f"FOUND HEREDOC END STR {next_idx}")
+                        indent = self.ls_code[next_idx - 1].indent
+                        code = PythonCode(heredoc + (indent * ' ') + ncode.content)
+                        idx = next_idx
+                        break
+                    elif type(ncode) is AsmCode:
+                        print(f"ADD ASMCODE idx {next_idx}")
+                        heredoc += ncode.content
+                    next_idx += 1
+            res.append(code)
+            idx += 1
+        self.ls_code = res
+
     def handle_function(self, cols):
         from ninjasm.parser import PythonBeginFunction, PythonEndFunction, AsmCode
         res = []
@@ -44,6 +78,10 @@ class Generator:
                 last_indent = self.ls_code[last_func[-1] + 1].indent
                 without_return = True
                 # FIXME: how to handle inline function
+                # FIXME: check that #end is at same level than declaring function
+                # FIXME: check than asmcode indent level is >= of indent level of last_beginning function
+                # FIXME: at #end handle the value of an ignore_inside (-1 or value), that handle the indent level of last inside function
+                # FIXME: check only asmcode between indent level of #end and the ignore_inside
                 # check that no asmcode belongs to between here and beginning of function
                 for subidx in range(idx, last_func[-1] + 1, -1):
                     print(f"CHECK subidx {subidx}")
@@ -60,6 +98,7 @@ class Generator:
     def generate(self, stage1='__output__.py', stage2='__final__.nja'):
         here = pl.Path('.').resolve()
         cols = self.handle_indent()
+        self.handle_heredoc()
         self.handle_function(cols)
         print(f"LS CODE {self.ls_code}")
         with open(here / stage1, 'w') as f:

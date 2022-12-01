@@ -1,12 +1,14 @@
 """
-Parser for Ninjasm
+Preprocessor for Ninjasm
 
+    FIXME: rename in preprocessor
     - Distinguish python code from ASM code.
-    - Distinguish pure ASM INSN from Ninjasm directive
+    - TODO: Distinguish pure ASM INSN from Ninjasm directive
     - Ninjasm directive follow yasm/nasm section/global/db
 """
 
 import re
+
 
 class PythonCode:
     def __init__(self, content):
@@ -30,6 +32,13 @@ class PythonCode:
 
     def add_content(self):
         return self.content + '\n'
+
+class PythonBeginStr(PythonCode):
+    pass
+
+class PythonEndStr(PythonCode):
+    def __init__(self, close):
+        PythonCode.__init__(self, f"{close}#endstr")
 
 class PythonBeginFunction(PythonCode):
     def __init__(self, content, fname):
@@ -87,8 +96,12 @@ class Builder:
     def build(self, groupdict):
         if groupdict['python_code'] is not None:
             return PythonCode(groupdict['code'])
-        if groupdict['python_funcode'] is not None:
+        elif groupdict['python_funcode'] is not None:
             return PythonBeginFunction(groupdict['fcode'], groupdict['fname'])
+        elif groupdict['python_begin_str'] is not None:
+            return PythonBeginStr(groupdict['scode'])
+        elif groupdict['python_end_str'] is not None:
+            return PythonEndStr(groupdict['quotes'])
         elif groupdict['asm_insn'] is not None:
             return AsmCode(groupdict['asm_insn'])
         elif groupdict['comment'] is not None:
@@ -102,12 +115,16 @@ class Parser:
          # Due to some equivalence between PEG and regex formalism, let's describe our parser in PEG format
          #
          #  stmts <- stmt* EOS
-         #  stmt <- python_code / comment EOS / asm_insn comment? EOS
+         #  stmt <- python_end_str / python_begin_str / python_code / comment / asm_insn
+         #  python_end_str <- \("'''"|'\"\"\"'\) EOS
+         #  python_begin_str <- .* f\("'''"|'\"\"\"'\) EOS
          #  python_code <- ';>> ' .* EOS
          #  comment <- ';' .* EOS
          #  asm_insn <- [^;]* comment? EOS
         )
         (?P<python_funcode>;>>\s(?P<fcode>\s*def\s+(?P<fname>\w+)[^\n]*)\n)
+        | (?P<python_end_str>;>>\s+(?P<quotes>(?:'''|\"\"\"))\s*\n)
+        | (?P<python_begin_str>;>>\s(?P<scode>[^\n]*(?<=f(?:'''|\"\"\")))\s*\n)
         | (?P<python_code>;>>\s(?P<code>[^\n]*)\n)
         | (?P<comment>;(?!>>)[^\n]*\n)
         | (?P<asm_insn>[^;\n]*(?P<comment_asm_insn>;[^\n]*)?\n)

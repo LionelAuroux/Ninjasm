@@ -1,0 +1,11 @@
+[build-system]
+requires = ["setuptools", "wheel"]
+
+[project]
+name = "ninjasm"
+version = "0.0.1"
+dependencies = [
+    "keystone-engine",
+    "capstone",
+    "unicorn",
+]

@@ -22,9 +22,9 @@ def main():
         s3 = f.with_suffix('.o')
         g.generate(s1, s2)
         # CALL Python to generate ASM
-        sp.run(['python3.10', s1])
+        sp.run(['python', s1])
         # CALL NASM to generate .O
         sp.run(['nasm', '-felf64', s2, '-o', s3])
-        content = open(s2).read()
-        a = Asm(content)
-        a.assemble()
+        #Content = open(s2).read()
+        #A = Asm(content)
+        #A.assemble()
