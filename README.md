@@ -25,10 +25,10 @@ The actual version support:
 ## Installation
 
 ```bash
-    git clone https://github.com/LionelAuroux/Ninjasm.git
-    cd Ninjasm
-    python3 -m build
-    pip install .
+    $ git clone https://github.com/LionelAuroux/Ninjasm.git
+    $ cd Ninjasm
+    $ python3 -m build
+    $ pip install .
 ```
 
 ## Usage
@@ -87,3 +87,36 @@ However, a typical Ninjasm code look like this...
         msg db "Hello World", 0xa
         len_msg equ $-msg
 ```
+
+For a classical example, write the previous code into the `class.nja` file.
+
+```bash
+    $ ls
+    class.nja
+    $ ninjasm
+    $ ls
+    class.asm class.nja class.o class.py
+```
+
+Ninjasm will :
++ parse your __class.nja__ code and produce a __class.py__ file...
++ call *python3* on your __class.py__ file and produce a __class.asm__ file...
++ call *nasm* on your __class.asm__ file and procude a __class.o__ file...
+
+You are free to link this __.o__ with other project, or to produce a binary with it (if it contain an "\_start" symbol).
+
+```bash
+    $ ls class.o
+    class.o
+    $ ld class.o -o test
+    $ ./test
+    Hello world
+    $
+```
+
+## Features
+
+- Full power of Python for processing your assembly code.
+- Thanks to [Keystone]() for compile time binary code production.
+- Thanks to [Unicorn]() for compile time binary evaluation.
+- Thanks to [Capstone]() for compile time binary disassembling.
