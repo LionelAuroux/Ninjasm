@@ -33,11 +33,11 @@ The actual version support:
 
 ## Usage
 
-    Ninjasm is an assembly language (nasm dialect) using python as macro processor.
+Ninjasm is an assembly language (nasm dialect) using python as macro processor.
 
-    You could consult sample code [here](test).
+You could consult sample code [here](test/).
 
-    However, a typical Ninjasm code look like this...
+However, a typical Ninjasm code look like this...
 
 ```asm
 
