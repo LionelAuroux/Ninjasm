@@ -1,33 +1,32 @@
 ;>> from ninjasm.asm import *
-
 ;>> def get_asm():
 ;>>     a = """;test\n""" + f''';don't bug here''' + f"""
     mov rax, 1
     mov rdi, 1
-    mov rsi, msg
-    mov rdx, len
+    mov rsi, 0xcafebabe
+    mov rdx, 0xdeadbeef
     syscall
 ;>>     """
 ;>>     b = f"""
     mov rax, 1
     mov rdi, 1
-    mov rsi, msg
-    mov rdx, len
+    mov rsi, msg ; xref
+    mov rdx, msg.len ; property of symbol
     syscall
     msg db "Hello World", 0xa
-   ; len equ $ - msg
+    ;len equ $ - msg ;!!! len(__local__.msg)
     end: resw 15
     other resb 100
 ;>>     """
 ;>>     ass = Asm(b)
 ;>>     ass.assemble()
+;>>     ass.resolve()
 ;>>     print(f"Assembly {ass}")
 ;>>     return ass
 ;>> #
-
 ;>> def calc_ctf():
 ;>>     code = f"""
-    mov rax, 42
+    mov rax, 12
     mov rdx, 2600
     add rax, rdx
 ;>>     """
@@ -38,18 +37,27 @@
 ;>> # end_def
 ;>> calc_ctf()
 
+;>> asm = get_asm()
+
 section .text
 
     global _start
 _start:
 
-    {get_asm().to_asm()}
+    {asm.to_asm()}
 
     mov rax, 60
     xor rdi, rdi
     syscall
 
+
+
+
 section .data
 
     msg db "Hello World", 0xa
-    len equ $ - msg
+    {asm.to_dbstr()}
+
+
+
+

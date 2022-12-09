@@ -8,4 +8,9 @@ dependencies = [
     "keystone-engine",
     "capstone",
     "unicorn",
+    "construct",
+    "pyelftools",
 ]
+
+[project.scripts]
+ninjasm = "ninjasm:main"

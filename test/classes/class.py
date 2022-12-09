@@ -48,5 +48,5 @@ __out__ += f'\n'
 __out__ += f'section .data\n'
 __out__ += f'    msg db "Hello World", 0xa\n'
 __out__ += f'    len_msg equ $-msg\n'
-with open('/home/iopi/Documents/Ninjasm/test/classes/class.nja', 'w') as f:
+with open('/home/iopi/Documents/Ninjasm/test/classes/class.asm', 'w') as f:
     f.write(__out__)
