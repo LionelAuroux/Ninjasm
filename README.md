@@ -37,6 +37,8 @@ Ninjasm is an assembly language (nasm dialect) using python as macro processor.
 
 You could consult sample code [here](test/).
 
+### Basic macro processing.
+
 However, a typical Ninjasm code look like this...
 
 ```asm
@@ -114,9 +116,49 @@ You are free to link this __.o__ with other project, or to produce a binary with
     $
 ```
 
+### Payload expension.
+
+You could also produce payloads.
+
+```asm
+    ;>> import sys
+    ;>> from ninjasm.asm import *
+    ;>> print('This Part is in python')
+    ;>> print(f"So we have full access to python loaded in {sys.path}")
+    ;>> # Comment in generated file
+    ;>> a = f"""
+            mov rax, 1          ; system call for write
+            mov rdi, 1          ; file descriptor for STDOUT
+            mov rsi, msg        ; address of string in the section
+            mov rdx, msg.len    ; len property of the 'db'
+            syscall
+
+            mov rax, 60
+            xor rdi, rdi
+            syscall
+
+            msg db "Hello, World", 0xa
+
+    ;>> """
+    ;>> ass = Asm(a)
+    ;>> ass.assemble()
+    ;>> ass.resolve()
+
+    section .text
+
+        global _start
+        _start:
+            
+            {ass.to_asm()}
+```
+
 ## Features
 
 - Full power of Python for processing your assembly code.
-- Thanks to [Keystone]() for compile time binary code production.
-- Thanks to [Unicorn]() for compile time binary evaluation.
-- Thanks to [Capstone]() for compile time binary disassembling.
+- Thanks to [Keystone](https://www.keystone-engine.org) for compile time binary code production.
+- Thanks to [Unicorn](https://www.unicorn-engine.org/) for compile time binary evaluation.
+- Thanks to [Capstone](https://www.capstone-engine.org) for compile time binary disassembling.
+
+
+### TODO
+- __ELF Relocatable__ Support: No more need of *nasm* to producing ELF file.
