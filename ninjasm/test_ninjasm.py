@@ -80,10 +80,21 @@ def test_evalcpy():
          db 0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00
          db 0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00
     end:
+        mov rax, 2600
     """
     ass = Asm(asm)
     ass.assemble()
     ass.resolve()
-    log.info(f"CODE {ass.to_dbstr()}")
-    ass.eval()
+    log.info(f"XREF {ass.xref}")
+    log.info(f"DEFS {ass.defs}")
     log.info(f"CODE {ass.to_asm()}")
+    ass.eval()
+    assert 'RAX' in ass.regs_values and ass.regs_values['RAX'] == 2600
+    log.info(f"DEFS {ass.defs}")
+    adr = ass.defs[b'buff'][b'offs'] + 0x401000
+    sz = ass.defs[b'buff'][b'len']
+    log.info(f"ADR OF BUFF {adr}: {sz}")
+    ar = ass.uc.mem_read(adr, sz)
+    log.info(f"MEM {ar}")
+    for it in range(sz):
+        assert ar[it] == 0x90

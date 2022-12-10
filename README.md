@@ -116,7 +116,7 @@ You are free to link this __.o__ with other project, or to produce a binary with
     $
 ```
 
-### Payload expension.
+### Payload expension at build time.
 
 You could also produce payloads.
 

@@ -30,6 +30,7 @@ class XRef:
         self.value = None
         self.section = section
         self.resolved = False
+        self.is_relative = False
 
     def __repr__(self):
         return f"\n{self.fullsymbol} at {self.idx} size {self.szinsn} idxref {self.idxref}: {self.code}"
@@ -45,9 +46,12 @@ class XRef:
             if self.attr == b'len':
                 val = assembly.defs[self.symbol][b'len']
         else:
-            val = assembly.defs[self.symbol][b'offs'] + base_address # FIXME: raw start address
-        print(f"GETSUBL for {self.fullsymbol} : {val}")
+            if not self.is_relative:
+                val = assembly.defs[self.symbol][b'offs'] + base_address # FIXME: raw start address
+            else:
+                val = assembly.defs[self.symbol][b'offs'] - self.idx - self.szinsn
         nbytes = self.szinsn - self.idxref
+        log.info(f"GETSUBL for {self.fullsymbol} : {val} by {nbytes} bytes")
         fmt = None
         match nbytes:
             case 8:
@@ -167,16 +171,17 @@ class DirectiveParser:
             # store the result
             stmt = m.groupdict()
             adv = len(m.group(0))
-            # special case for defines, read list of constant
-            if 'define' in stmt:
+            # special case for defines, read list of constant 
+            # TODO : read dup(X) and dup(?)
+            if 'define' in stmt and stmt['define'] is not None:
                 # FIXME: when def_name is null, attach to the previous def_name!!!
                 stmt['values'] = []
-                print(f"DEFINE!!! {adv}")
+                log.info(f"DEFINE!!! {adv}")
                 # advance
                 pos += adv
                 while pos < len(content):
                     m = self.const_parser.match(content, pos)
-                    print(f"READ1 {content[pos:]}")
+                    log.info(f"READ1 {content[pos:]}")
                     if m is None:
                         if content[pos] != b'\n': # handle end of string
                             p = re.compile(rb",[\s]*")
@@ -184,9 +189,9 @@ class DirectiveParser:
                             if coma is not None:
                                 adv = len(coma.group(0))
                                 pos += adv
-                                print(f"READ2 {content[pos:]}")
+                                log.info(f"READ2 {content[pos:]}")
                         else:
-                            print(f"READ3 {content[pos:]}")
+                            log.info(f"READ3 {content[pos:]}")
                             break
                     else:
                         g = m.groupdict()
@@ -198,11 +203,11 @@ class DirectiveParser:
                         stmt['values'].append(v)
                         adv = len(m.group(0))
                         pos += adv
-                print(f"READ4 {content[pos:]} / {stmt}")
+                log.info(f"READ4 {content[pos:]} / {stmt}")
             self.stmts.append(stmt)
             # advance
             pos += adv
-        print(f"RETURN POS {pos}")
+        log.info(f"RETURN POS {pos}")
         return pos
 
     def get_stmts(self):
@@ -210,16 +215,16 @@ class DirectiveParser:
 
 def handle_directive(assembly, directive):
     import sys
-    print(f"HANDLE {directive}")
+    log.info(f"HANDLE {directive}")
     if directive['define'] is not None:
         # FIXME: add dup(XX) in the directive
         df = directive['def_name']
         dt = directive['def_type']
         buf = []
-        print(f"DEF {df}")
+        log.info(f"DEF {df}")
         # FIXME: for now handle only bytes
         for t, v in directive['values']:
-            print(f"Encode {t}: {v}")
+            log.info(f"Encode {t}: {v}")
             match t:
                 case 'int_val':
                     # handle prefix, else simple int
@@ -242,38 +247,46 @@ def handle_directive(assembly, directive):
                 case other:
                     raise RuntimeError(f"Unhandle type {other}")
         begin = assembly.sections[assembly.current_section]['size']
-        #assembly.defs[df] = {b"offs": begin, b"len": len(buf), b"bytes": buf, b"type": dt}
-        assembly.add_def(dt, df, buf, begin)
-        print(f"END DEFS {assembly.defs[df]}")
-        assembly.sections[assembly.current_section]['encoding'] += buf
+        if df is None:
+            # lookup for last define
+            assembly.upd_def(dt, buf)
+        else:
+            assembly.add_def(dt, df, buf, begin)
+        log.info(f"END DEFS {assembly.defs[assembly.last_def]}")
+        assembly.sections[assembly.current_section]['opcodes'] += buf
         assembly.sections[assembly.current_section]['size'] += len(buf)
         assembly.sections[assembly.current_section]['from_other'] |= set(range(begin, begin + len(buf)))
-        print(f"BUF {buf}")
+        log.info(f"BUF {buf}")
     elif directive['reserve'] is not None:
-        print(f"RES")
+        log.info(f"RES")
         rf = directive['res_name']
         rt = directive['res_type']
         rs = directive['res_size']
         # TODO
     elif directive['label'] is not None:
-        print(f"LABL")
+        log.info(f"LABL")
+        if directive['label_insn'] is not None:
+            raise RuntimeError(f"Don't handle labeled insn for now! put it in another line")
+        ln = directive['label_name']
+        offs = assembly.sections[assembly.current_section]['size']
+        assembly.add_label(ln, offs)
     elif directive['section'] is not None:
-        print(f"SECT")
+        log.info(f"SECT")
     elif directive['global'] is not None:
-        print(f"GLB")
+        log.info(f"GLB")
     elif directive['extern'] is not None:
-        print(f"EXT")
+        log.info(f"EXT")
     elif directive['static'] is not None:
-        print(f"STAT")
+        log.info(f"STAT")
     elif directive['origin'] is not None:
-        print(f"ORG")
+        log.info(f"ORG")
     elif directive['default'] is not None:
-        print(f"DFLT")
+        log.info(f"DFLT")
 
 def handle_decimal_value(insn):
     import sys
     import re
-    print(f"CHECK {insn}")
+    log.info(f"CHECK {insn}")
     # FIXME: avoir hexa value without 0x
     m = re.search(rb"(?i)(?P<int>(0[xb]?)?[1-9]\d*)", insn)
     if m is not None:
@@ -306,6 +319,7 @@ class Asm:
         # for cross reference
         self.xref = {}
         self.last_xref = None
+        self.last_def = None
         # for definitions
         self.defs = {}
         # parser for Ninjasm directive
@@ -317,23 +331,38 @@ class Asm:
         self.uc = Uc(UC_ARCH_X86, UC_MODE_64)
         # for sections handling
         self.current_section = ".text"
-        self.sections = {".text": {"encoding": [], "size": 0, "from_asm": set(), "from_other": set()}}
+        self.sections = {".text": {"opcodes": [], "size": 0, "from_asm": set(), "from_other": set()}}
         self.register_map()
 
+    def add_label(self, lbl_name, offs):
+        self.defs[lbl_name] = {b"offs": offs}
+
     def add_def(self, def_type, def_name, buf, offs):
+        self.last_def = def_name
         self.defs[def_name] = {b"offs": offs, b"len": len(buf), b"bytes": buf, b"type": def_type}
+
+    def upd_def(self, def_type, buf):
+        old_dt = self.defs[self.last_def][b'type']
+        if def_type != old_dt:
+            raise RuntimeError(f"Incompatible type of this buffer({def_type}) and the previous({old_dt})")
+        self.defs[self.last_def][b"len"] += len(buf)
+        self.defs[self.last_def][b"bytes"] += buf
 
     def sym_resolver(self, symbol, value):
         from ctypes import byref
-        print(f"Must RESOLVE {symbol} {value}")
+        log.info(f"Must RESOLVE {symbol} {value}")
+        # for label we are called twice, skip
+        if symbol in self.xref:
+            log.info(f"Already defined, skip")
+            return False
         # check for property
         components = None
-        if b'.' in symbol:
+        if b'.' in symbol and symbol[0] != '.': # dot as prefix for local label like Nasm
             components = symbol.split(b'.')
             if len(components) > 2:
                 raise RuntimeError(f"Can't handle more than one dot for property")
             symbol = components[0]
-        xr = XRef(symbol, len(self.sections[self.current_section]['encoding']), self.current_section)
+        xr = XRef(symbol, len(self.sections[self.current_section]['opcodes']), self.current_section)
         # add optional property
         if components:
             xr.attr = components[1]
@@ -342,86 +371,105 @@ class Asm:
             self.xref[symbol] = []
         self.last_xref = xr
         self.xref[symbol].append(xr)
+        log.info(f"{symbol} -> {xr}")
+        return False
 
     def get_insn(self, insn):
         # Filter directive ASM
         # FIXME: keystone force setRadix(16) in LLVM engine
         # parse and transform numerical constant into hexadecimal
+        # clean insn
+        insn = insn.lstrip()
         code, cnt = self.ks.asm(handle_decimal_value(insn))
-        print(f"GETINSN {code} {cnt}")
+        log.info(f"GETINSN {code} {cnt}")
         if self.last_xref:
             self.last_xref.code = code
             self.last_xref.szinsn = len(code)
             pos = 0
             for pos, c in enumerate(reversed(code)):
-                if c == 0xff:
+                if c != 0:
                     break
-            self.last_xref.idxref = len(code) - pos - 1
+            if pos == 0 and code[-1] != 0x0:
+                raise RuntimeError("Error didn't the 0x0! label ?")
+            self.last_xref.idxref = len(code) - pos
         return code, len(code)
 
     def assemble(self):
         self.ks.sym_resolver = self.sym_resolver
-        self.sections[self.current_section]['encoding'], self.sections[self.current_section]['size'] = [], 0
+        self.sections[self.current_section]['opcodes'], self.sections[self.current_section]['size'] = [], 0
         for insn in self.content.encode('utf-8').split(b'\n'):
             self.last_xref = None
             if insn.strip() == b"":
                 continue
-            print(f"ASS {insn}")
+            log.info(f"ASS {insn}")
             code = None
             size = 0
             try:
                 # Check Directive
                 pos = self.dir_parse.parse(insn)
                 if pos != 0:
-                    print(f"Found directive")
+                    log.info(f"Found directive")
                     stmts = self.dir_parse.get_stmts()
                     # process directive
                     for stmt in stmts:
                         handle_directive(self, stmt)
-                    print(f"Skip...")
+                    log.info(f"Skip...")
                     continue
                 elif pos == 0:
-                    print(f"No directive")
+                    log.info(f"No directive")
                 code, size = self.get_insn(insn)
             except KsError as e:
-                print(f"Error: {e}")
+                log.info(f"Error: {e}")
                 if e.errno == KS_ERR_ASM_SYMBOL_MISSING:
-                    print(f"HANDLE THIS ERROR for insn : {insn}")
+                    insn = insn.lstrip()
+                    log.info(f"HANDLE THIS ERROR for insn : {insn}")
                     # mark for x referencing
-                    new_insn = insn.replace(self.last_xref.fullsymbol, b"0xff")
+                    new_insn = None
+                    # FIXME : For Jcc/Jmp and Call must do some dirty trick
+                    magic_value = b"0x00"
+                    log.info(f"INSN {insn[0]} or {insn}")
+                    if insn[0] == ord(b'j'):
+                        # FIXME: other case for relative addressing?
+                        self.last_xref.is_relative = True
+                        # because the number bytes of instruction is 2
+                        magic_value = b"0x02"
+                    elif insn == b"call":
+                        # because the number bytes of instruction is 5
+                        magic_value = b"0x05"
+                    new_insn = insn.replace(self.last_xref.fullsymbol, magic_value)
                     code, size = self.get_insn(new_insn)
-            print(f"into {code}/{size}")
+            log.info(f"into {code}/{size}")
             begin = self.sections[self.current_section]['size']
-            self.sections[self.current_section]['encoding'] += code
+            self.sections[self.current_section]['opcodes'] += code
             self.sections[self.current_section]['size'] += size
             self.sections[self.current_section]['from_asm'] |= set(range(begin, begin + size))
         bcode = ""
         for section, data in self.sections.items():
             # iterate thru sections
-            for i in data['encoding']:
-                print(f"{type(i)} / {i}")
+            for i in data['opcodes']:
+                log.info(f"{type(i)} / {i}")
                 if i is not None:
                     bcode += "%02x " % i
-            print(f"ENCODE {data['size']} instructions")
-        print(f"XREF {self.xref}")
-        print(f"<{self.content}> = [{bcode}]")
+            log.info(f"ENCODE {data['size']} instructions")
+        log.info(f"ENDXREF {self.xref}")
+        log.info(f"END ASSEMBLE <{self.content}> = [{bcode}]")
 
     def resolve(self, base_address=0x401000):
-        log.info(f"WALK DEFS")
+        log.info(f"RESOLVE DEFS")
         for dn in self.defs.keys():
-            print(f"SET XREF for {dn}")
+            log.info(f"SET XREF for {dn}")
             for xr in self.xref[dn]:
                 for idx, v in enumerate(xr.get_resolved(self, base_address)):
                     subidx = xr.idx + xr.idxref + idx
-                    print(f"XREFVAL {subidx} = {v}")
-                    self.sections[xr.section]['encoding'][subidx] = v
+                    log.info(f"XREFVAL {subidx} = {v}")
+                    self.sections[xr.section]['opcodes'][subidx] = v
         # FIXME: Need to detect unresolved XRef, by default, rest untouched and be reverse into ASM with to_asm to allow iterative generation
 
     def to_dbstr(self, section='.text', begin=0, end=None):
         if end is None:
             end = self.sections[section]['size']
-        print(f"DBSTR {begin} {end} in {section}")
-        hexastr = ", ".join([("0x%02X" % it) for it in self.sections[section]['encoding'][begin:end] if it is not None])
+        log.info(f"DBSTR {begin} {end} in {section}")
+        hexastr = ", ".join([("0x%02X" % it) for it in self.sections[section]['opcodes'][begin:end] if it is not None])
         return f"db {hexastr}"
 
     def to_bytes(self, section='.text', begin=0, end=None):
@@ -429,7 +477,7 @@ class Asm:
         log.info(f"SECTION {self.sections[section]}")
         if end is None:
             end = self.sections[section]['size']
-        return b"".join([it.to_bytes(1, 'big') for it in self.sections[section]['encoding'][begin:end]])
+        return b"".join([it.to_bytes(1, 'big') for it in self.sections[section]['opcodes'][begin:end]])
 
     def to_asm(self, section='.text'):
         code = []
@@ -456,7 +504,13 @@ class Asm:
                     raw_opstr = insn.op_str
                     if pos in unresolved_adr:
                         log.info(f"unresolved at {insn.address} with {raw_opstr}")
-                        raw_opstr = raw_opstr.replace("0xff", unresolved_adr[pos].fullsymbol.decode('utf-8'))
+                        magic_value = "0x00"
+                        # FIXME: for unresolved Jcc/JMP and call, the magic value differ
+                        if insn.mnemonic[0] == ord(b'j'):
+                            magic_value = "0x02"
+                        elif insn.mnemonic == b"call":
+                            magic_value = "0x05"
+                        raw_opstr = raw_opstr.replace(magic_value, unresolved_adr[pos].fullsymbol.decode('utf-8'))
                     txtcode = f"{insn.mnemonic} {raw_opstr}"
                     log.info(f"DISASM {pos} {txtcode} {insn.bytes}")
                     code.append(txtcode)
