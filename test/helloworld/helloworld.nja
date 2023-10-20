@@ -4,8 +4,14 @@
 ;>> print(f"So we have full access to python loaded in {sys.path}")
 ;>> # Comment in generated file
 
+;>- format('elf64')
+
+;>- section('.text')
 section .text
 
+;>- public('_start')
+;>- extern('_start')
+;>- include('something.nja')
     global _start
     _start:
 
@@ -26,15 +32,15 @@ section .text
 ;>> ass.assemble()
 ;>> ass.resolve()
         
-        {ass.to_asm()}
+{ass.to_asm(for_asm=True)}
 
-
+;>- section('.data')
 section .data
 
         msg db "Hello, World", 0xa
         len equ $-msg
 
 ;>> for it in range(10):
-    static .data{it}
+    static .data{it} ; voir le support de static
     .data{it} db {10+it}
 ;>> #endfor

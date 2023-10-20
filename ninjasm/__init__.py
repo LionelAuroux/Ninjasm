@@ -4,6 +4,7 @@ import subprocess as sp
 from ninjasm.preprocessor import Parser
 from ninjasm.generator import Generator
 from ninjasm.asm import Asm
+from ninjasm.flat import Flat
 import sys
 import logging
 

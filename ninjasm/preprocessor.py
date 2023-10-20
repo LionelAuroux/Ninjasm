@@ -122,6 +122,7 @@ class Parser:
          #  python_end_str <- \("'''"|'\"\"\"'\) EOS
          #  python_begin_str <- .* f\("'''"|'\"\"\"'\) EOS
          #  python_code <- ';>> ' .* EOS
+         #  *TODO* python_dir <- ';>- ' .* EOS
          #  comment <- ';' .* EOS
          #  asm_insn <- [^;]* comment? EOS
         )

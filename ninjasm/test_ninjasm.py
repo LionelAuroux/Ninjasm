@@ -1,5 +1,5 @@
 from ninjasm import *
-from ninjasm.elf import *
+#from ninjasm.elf import *
 import pathlib as pl
 from elftools.elf.elffile import ELFFile
 import re
@@ -33,6 +33,57 @@ def test_elftools():
                 log.info(f"SYMBOLS!!")
                 for sym in section.iter_symbols():
                     log.info(f"SYM {sym}: <{sym.entry.keys()}> - <{sym.name}>")
+
+def test_insn():
+    """
+    Encode une seule instruction
+    """
+    ass = Asm("")
+    out = ass.get_insn(b"mov rax, 2600")
+    log.info(f"OUT {out}")
+    log.info(f"TYPE {type(out)}")
+
+def test_flat():
+    f = Flat()
+    f.db('12')
+    b = f.bytes
+    log.info(f"DATA {b}")
+    assert b == b'\x0c'
+    f = Flat()
+    f.db('1')
+    b = f.bytes
+    log.info(f"DATA {b}")
+    assert b == b'\x01'
+    f = Flat()
+    f.db('1b')
+    b = f.bytes
+    log.info(f"DATA {b}")
+    assert b == b'\x01'
+    f = Flat()
+    f.db('Ah')
+    b = f.bytes
+    log.info(f"DATA {b}")
+    assert b == b'\x0A'
+    f = Flat()
+    f.db(12)
+    b = f.bytes
+    log.info(f"DATA {b}")
+    assert b == b'\x0c'
+    f = Flat()
+    f.db('0xfa')
+    b = f.bytes
+    log.info(f"DATA {b}")
+    assert b == b'\xfa'
+    f = Flat()
+    f.db('0o65')
+    b = f.bytes
+    log.info(f"DATA {b}")
+    assert b == b'5'
+    f = Flat()
+    f.db('0b1111')
+    b = f.bytes
+    log.info(f"DATA {b}")
+    assert b == b'\x0f'
 
 def test_asmback():
     asm = """

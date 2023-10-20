@@ -386,63 +386,90 @@ class Asm:
             self.last_xref.code = code
             self.last_xref.szinsn = len(code)
             pos = 0
+            # On termine par une opérande NULL, donc on compte tout les octets =0
             for pos, c in enumerate(reversed(code)):
                 if c != 0:
                     break
             if pos == 0 and code[-1] != 0x0:
                 raise RuntimeError("Error didn't the 0x0! label ?")
+            # idxref contient l'index de l'operande
             self.last_xref.idxref = len(code) - pos
         return code, len(code)
 
     def assemble(self):
+        # callback pour la gestion de la resolution des symboles
         self.ks.sym_resolver = self.sym_resolver
+        # initialise le stockage des opcodes de la section courante
         self.sections[self.current_section]['opcodes'], self.sections[self.current_section]['size'] = [], 0
+        # pour chacune des instructions
         for insn in self.content.encode('utf-8').split(b'\n'):
+            # par de reference croisé pour l'instant
             self.last_xref = None
-            if insn.strip() == b"":
+            # saute les lignes vides
+            insn = insn.strip()
+            if insn == b"":
                 continue
+            # on a vraiment une instruction
             log.info(f"ASS {insn}")
+            # code et size vont stocké 1 instruction et la taille de l'instruction
             code = None
             size = 0
+            # essaie de lire une instruction
             try:
                 # Check Directive
                 pos = self.dir_parse.parse(insn)
                 if pos != 0:
                     log.info(f"Found directive")
+                    # recupère les directives
                     stmts = self.dir_parse.get_stmts()
                     # process directive
                     for stmt in stmts:
                         handle_directive(self, stmt)
+                    # c'était une directive, passe à la prochaine instruction
                     log.info(f"Skip...")
                     continue
+                # pas de directive
                 elif pos == 0:
                     log.info(f"No directive")
+                # c'est donc une instruction
                 code, size = self.get_insn(insn)
+            # traite les erreurs de KeyStone, ce qui peut être normale
             except KsError as e:
                 log.info(f"Error: {e}")
+                # on ne gère que les symgoles manquant
                 if e.errno == KS_ERR_ASM_SYMBOL_MISSING:
-                    insn = insn.lstrip()
+                    #insn = insn.lstrip()
                     log.info(f"HANDLE THIS ERROR for insn : {insn}")
-                    # mark for x referencing
+                    # mark for cross referencing
                     new_insn = None
                     # FIXME : For Jcc/Jmp and Call must do some dirty trick
+                    # on remplace le symbol aillant provoqué l'erreur par un magic_number
+                    # que l'on traitera après
                     magic_value = b"0x00"
                     log.info(f"INSN {insn[0]} or {insn}")
+                    # cas des jumps
                     if insn[0] == ord(b'j'):
                         # FIXME: other case for relative addressing?
                         self.last_xref.is_relative = True
                         # because the number bytes of instruction is 2
+                        # FIXME: faire test avec jmp absolu sur des tailles plus grandes
                         magic_value = b"0x02"
                     elif insn == b"call":
                         # because the number bytes of instruction is 5
                         magic_value = b"0x05"
+                    # on modifie la chaine de caractère en remplacant le symbol par la valeur magique
                     new_insn = insn.replace(self.last_xref.fullsymbol, magic_value)
+                    # recupere le code de la nouvelle instruction
                     code, size = self.get_insn(new_insn)
+            # on a pu encodé une instruction
             log.info(f"into {code}/{size}")
+            # gère le label $ comme étant begin
             begin = self.sections[self.current_section]['size']
+            # ajoute l'instruction à la section
             self.sections[self.current_section]['opcodes'] += code
             self.sections[self.current_section]['size'] += size
             self.sections[self.current_section]['from_asm'] |= set(range(begin, begin + size))
+        # juste pour le debug
         bcode = ""
         for section, data in self.sections.items():
             # iterate thru sections
@@ -479,7 +506,7 @@ class Asm:
             end = self.sections[section]['size']
         return b"".join([it.to_bytes(1, 'big') for it in self.sections[section]['opcodes'][begin:end]])
 
-    def to_asm(self, section='.text'):
+    def to_asm(self, section='.text', for_asm=False):
         code = []
         pos = 0
         szcode = self.sections[section]['size']
@@ -513,6 +540,10 @@ class Asm:
                         raw_opstr = raw_opstr.replace(magic_value, unresolved_adr[pos].fullsymbol.decode('utf-8'))
                     txtcode = f"{insn.mnemonic} {raw_opstr}"
                     log.info(f"DISASM {pos} {txtcode} {insn.bytes}")
+                    if for_asm:
+                        # ajoute devant des definitions de bytes et le code asm devient un commentaire
+                        dbstr = "db " + ", ".join([("0x%02X" % b) for b in insn.bytes])
+                        txtcode = dbstr + " ;     " + txtcode
                     code.append(txtcode)
                     pos += insn.size
                     break
