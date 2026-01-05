@@ -55,6 +55,19 @@ def main():
 
 def comp(f):
     content = open(f).read()
+    
+    if ';>>' in content:
+        print("\n[WARNING] This file contains embedded Python code that will be executed:")
+        print("-" * 60)
+        for i, line in enumerate(content.split('\n')):
+            if ';>>' in line:
+                print(f"  Line {i+1}: {line.strip()}")
+        print("-" * 60)
+        response = input("\nExecute this code? (yes/no): ")
+        if response.lower() != 'yes':
+            print("Aborted.")
+            return
+    
     p = Parser()
     stmts = p.parse(content)
     g = Generator(stmts)
@@ -62,10 +75,5 @@ def comp(f):
     s2 = f.with_suffix('.asm')
     s3 = f.with_suffix('.o')
     if g.generate(s1, s2):
-        # CALL Python to generate ASM
         sp.run(['python', s1])
-        # CALL NASM to generate .O
         sp.run(['nasm', '-felf64', s2, '-O0', '-o', s3])
-        #Content = open(s2).read()
-        #A = Asm(content)
-        #A.assemble()
